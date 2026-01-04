@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>M5 Audio Essence</title>
+<style>
+    :root {
+        --bg-main: #050008;
+        --panel-bg: #100510;
+        --neon-pink: #ff0055;
+        --neon-blue: #00d2ff;
+        --neon-green: #00ff99;
+        --text-color: #eee;
+    }
+    body { background: var(--bg-main); margin: 0; overflow: hidden; font-family: 'Courier New', sans-serif; color: var(--text-color); user-select: none; }
+    
+    #container { display: flex; flex-direction: column; width: 100vw; height: 100vh; position: relative; }
+
+    /* メインビジュアライザーエリア */
+    #visualizer-stage {
+        flex: 1; position: relative; background: #000; overflow: hidden;
+        display: flex; justify-content: center; align-items: center;
+        border-bottom: 2px solid var(--neon-pink);
+    }
+    canvas { position: absolute; top: 0; left: 0; }
+
+    /* 情報オーバーレイ */
+    .info-overlay {
+        position: absolute; top: 20px; left: 0; width: 100%; text-align: center;
+        pointer-events: none; z-index: 10;
+    }
+    #filename { color: var(--neon-blue); font-size: 14px; margin-bottom: 5px; text-shadow: 0 0 5px var(--neon-blue); }
+    #time-display { font-size: 24px; font-weight: bold; color: #fff; }
+    #speed-indicator { 
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        font-size: 80px; font-weight: bold; opacity: 0; transition: opacity 0.2s;
+        color: var(--neon-green); text-shadow: 0 0 20px var(--neon-green); pointer-events: none;
+    }
+
+    /* コントロールパネル */
+    #control-panel {
+        height: 240px; background: var(--panel-bg); padding: 15px; box-sizing: border-box;
+        border-top: 1px solid #333; display: flex; flex-direction: column; gap: 10px;
+    }
+
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    
+    .btn {
+        background: #222; border: 1px solid var(--neon-blue); color: var(--neon-blue);
+        padding: 15px 0; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center;
+        flex: 1; transition: 0.1s; font-size: 14px; display: flex; align-items: center; justify-content: center;
+    }
+    .btn:active { transform: scale(0.96); background: var(--neon-blue); color: #000; }
+    .btn-main { border-color: var(--neon-pink); color: var(--neon-pink); box-shadow: 0 0 10px rgba(255,0,85,0.2); }
+    .btn-main:active { background: var(--neon-pink); }
+    
+    .slider-group { flex: 1; display: flex; flex-direction: column; font-size: 10px; color: #aaa; }
+    input[type=range] { width: 100%; accent-color: var(--neon-pink); margin-top: 5px; }
+
+    /* メーター類 */
+    .meter-box { width: 60px; text-align: right; }
+    .val-disp { font-size: 14px; color: var(--neon-green); }
+
+    /* ステータスランプ */
+    #status-lamp {
+        width: 10px; height: 10px; border-radius: 50%; background: #333;
+        box-shadow: 0 0 5px #000; transition: 0.1s;
+    }
+
+    /* ファイル入力 */
+    input[type="file"] { display: none; }
+
+    /* 初期画面 */
+    #init-screen {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 999;
+        background: rgba(0,0,0,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center;
+    }
+    .start-btn {
+        padding: 20px 50px; font-size: 24px; border-radius: 50px; margin-top: 30px; cursor: pointer;
+        background: var(--neon-pink); color: #fff; font-weight: bold; border: 2px solid #fff;
+        box-shadow: 0 0 30px var(--neon-pink); animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+</style>
+</head>
+<body>
+
+<div id="container">
+    <div id="visualizer-stage">
+        <canvas id="vis-canvas"></canvas>
+        <div class="info-overlay">
+            <div id="filename">NO FILE</div>
+            <div id="time-display">00:00 / 00:00</div>
+        </div>
+        <div id="speed-indicator">SKIP &gt;&gt;&gt;</div>
+    </div>
+
+    <div id="control-panel">
+        <div class="row">
+            <label class="btn btn-main">
+                📂 LOAD FOLDER
+                <input type="file" id="file-input" webkitdirectory directory multiple accept="audio/*">
+            </label>
+            <div id="status-lamp"></div>
+            <div style="font-size:10px; color:#666;">QUEUE: <span id="queue-count">0</span></div>
+        </div>
+
+        <div class="row">
+            <button class="btn" onclick="seek(-30)">⏪ -30s</button>
+            <button class="btn" onclick="togglePlay()" id="play-btn">PLAY</button>
+            <button class="btn" onclick="seek(30)">+30s ⏩</button>
+        </div>
+        
+        <div class="row">
+            <button class="btn" style="border-color:var(--neon-green); color:var(--neon-green);" onclick="jumpToClimax()">
+                🚀 CLIMAX JUMP
+            </button>
+            <button class="btn" onclick="playNext()">NEXT TRACK ⏭</button>
+        </div>
+
+        <div class="row">
+            <div class="slider-group">
+                <span>SILENCE THRESHOLD (Auto Skip)</span>
+                <input type="range" id="thresh-slider" min="0" max="50" value="10">
+            </div>
+            <div class="meter-box">
+                <span id="thresh-val" class="val-disp">10</span>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="slider-group">
+                <span>MAX SPEED (During Silence)</span>
+                <input type="range" id="speed-slider" min="2" max="10" value="5">
+            </div>
+            <div class="meter-box">
+                <span id="speed-val" class="val-disp">x5.0</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="init-screen">
+    <h1 style="color:var(--neon-pink); text-shadow:0 0 20px var(--neon-pink); font-size:40px; margin:0;">M5 AUDIO</h1>
+    <div style="color:var(--neon-blue); letter-spacing:4px; margin-bottom:20px;">ESSENCE EXTRACTOR</div>
+    <label class="start-btn">
+        🎧 LOAD AUDIO
+        <input type="file" id="init-file-input" webkitdirectory directory multiple accept="audio/*">
+    </label>
+</div>
+
+<script>
+    // === 変数 ===
+    const canvas = document.getElementById('vis-canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Audio Context
+    let audioCtx, analyser, source;
+    let audioEl = new Audio();
+    audioEl.crossOrigin = "anonymous";
+    
+    // プレイリスト
+    let playlist = [];
+    
+    // 設定
+    let silenceThreshold = 10; // 0-255 (低いほど敏感にスキップ)
+    let skipSpeed = 5.0;       // スキップ時の速度
+    let normalSpeed = 1.0;
+    
+    // UI要素
+    const filenameDisp = document.getElementById('filename');
+    const timeDisp = document.getElementById('time-display');
+    const speedInd = document.getElementById('speed-indicator');
+    const statusLamp = document.getElementById('status-lamp');
+    const playBtn = document.getElementById('play-btn');
+    
+    // === 初期化 ===
+    document.getElementById('init-file-input').addEventListener('change', handleFiles);
+    document.getElementById('file-input').addEventListener('change', handleFiles);
+
+    // スライダー連動
+    document.getElementById('thresh-slider').addEventListener('input', (e) => {
+        silenceThreshold = parseInt(e.target.value);
+        document.getElementById('thresh-val').innerText = silenceThreshold;
+    });
+    document.getElementById('speed-slider').addEventListener('input', (e) => {
+        skipSpeed = parseFloat(e.target.value);
+        document.getElementById('speed-val').innerText = "x" + skipSpeed.toFixed(1);
+    });
+
+    // ダブルタップ全画面
+    let lastTap = 0;
+    document.getElementById('visualizer-stage').addEventListener('click', () => {
+        const now = Date.now();
+        if (now - lastTap < 300) {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+            else if (document.exitFullscreen) document.exitFullscreen();
+        }
+        lastTap = now;
+    });
+
+    function initAudio() {
+        if (audioCtx) return;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256; // 軽めに
+        
+        source = audioCtx.createMediaElementSource(audioEl);
+        source.connect(analyser);
+        analyser.connect(audioCtx.destination);
+    }
+
+    function handleFiles(e) {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        
+        // 音声ファイルのみ抽出
+        const audioFiles = files.filter(f => f.type.startsWith('audio/'));
+        if (audioFiles.length === 0) return;
+
+        playlist = playlist.concat(audioFiles);
+        shuffleArray(playlist);
+        
+        document.getElementById('queue-count').innerText = playlist.length;
+        document.getElementById('init-screen').style.display = 'none';
+        
+        initAudio();
+        playNext();
+        renderLoop();
+    }
+
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+
+    function playNext() {
+        if (playlist.length === 0) return;
+        const file = playlist.shift();
+        playlist.push(file); // ループ
+
+        const url = URL.createObjectURL(file);
+        audioEl.src = url;
+        audioEl.load();
+        
+        filenameDisp.innerText = file.name;
+        
+        audioEl.play().then(() => {
+            playBtn.innerText = "PAUSE";
+            // 開始直後は少し飛ばす（無音導入カット）
+            // audioEl.currentTime = 5; 
+        }).catch(console.error);
+        
+        // トラック終了時
+        audioEl.onended = () => {
+            playNext();
+        };
+    }
+
+    function togglePlay() {
+        if (audioEl.paused) {
+            audioCtx.resume();
+            audioEl.play();
+            playBtn.innerText = "PAUSE";
+        } else {
+            audioEl.pause();
+            playBtn.innerText = "PLAY";
+        }
+    }
+
+    function seek(sec) {
+        audioEl.currentTime += sec;
+    }
+
+    function jumpToClimax() {
+        if (!audioEl.duration) return;
+        // 60% 〜 90% の間へ飛ぶ
+        const range = 0.9 - 0.6;
+        const targetRatio = 0.6 + (Math.random() * range);
+        audioEl.currentTime = audioEl.duration * targetRatio;
+        
+        // 速度を少し落とす（味わうモード）
+        // normalSpeed = 0.9; 
+        // audioEl.playbackRate = 0.9;
+    }
+
+    // === メインループ（解析＆描画） ===
+    function renderLoop() {
+        requestAnimationFrame(renderLoop);
+        
+        // Canvasサイズ調整
+        const w = canvas.parentElement.clientWidth;
+        const h = canvas.parentElement.clientHeight;
+        if (canvas.width !== w || canvas.height !== h) {
+            canvas.width = w;
+            canvas.height = h;
+        }
+
+        if (!analyser) return;
+
+        // 1. 解析データ取得
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        analyser.getByteFrequencyData(dataArray);
+
+        // 2. 音量（エネルギー）計算
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+            sum += dataArray[i];
+        }
+        const average = sum / bufferLength; // 0 - 255
+
+        // 3. 自動変速ロジック (The Silence Skipper)
+        // 音量が閾値を下回ったら加速、上回ったら等倍
+        if (average < silenceThreshold) {
+            // 無音（退屈）
+            audioEl.playbackRate = skipSpeed;
+            speedInd.style.opacity = 0.8; // "SKIP >>>" 表示
+            statusLamp.style.background = "#333";
+            statusLamp.style.boxShadow = "none";
+        } else {
+            // 音あり（重要）
+            audioEl.playbackRate = normalSpeed;
+            speedInd.style.opacity = 0;
+            
+            // ランプを音に合わせて明滅
+            const hue = 180 + (average * 2); // 色変化
+            statusLamp.style.background = `hsl(${hue}, 100%, 60%)`;
+            statusLamp.style.boxShadow = `0 0 ${average/5}px hsl(${hue}, 100%, 60%)`;
+        }
+
+        // 4. ビジュアライザー描画
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, w, h);
+
+        const cx = w / 2;
+        const cy = h / 2;
+        const radius = Math.min(w, h) / 3;
+
+        // 円形スペクトラム
+        ctx.beginPath();
+        for (let i = 0; i < bufferLength; i++) {
+            const barHeight = dataArray[i] * 0.8;
+            const rad = (i / bufferLength) * Math.PI * 2;
+            
+            // ベース円 + 波形
+            const r = radius + (barHeight * 0.5);
+            const x = cx + Math.cos(rad) * r;
+            const y = cy + Math.sin(rad) * r;
+
+            const hue = (i / bufferLength) * 360 + (average); // 色回転
+            ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
+            ctx.lineWidth = 2;
+            
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        // 中央の脈動円
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * (0.5 + average/400), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 0, 85, ${average/255})`;
+        ctx.fill();
+
+        // 時間更新
+        const cur = formatTime(audioEl.currentTime);
+        const dur = formatTime(audioEl.duration || 0);
+        timeDisp.innerText = `${cur} / ${dur}`;
+    }
+
+    function formatTime(sec) {
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+</script>
+</body>
+</html>
