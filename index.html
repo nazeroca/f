@@ -6,14 +6,20 @@
     <title>M5 Ultimate Monitor</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* === 基本スタイル === */
+        /* === 基本スタイル (スクロール禁止・黒背景) === */
         html, body {
             height: 100%; width: 100%; margin: 0; padding: 0;
             overflow: hidden; background-color: #000; color: #fff;
-            font-family: sans-serif; touch-action: manipulation; user-select: none;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            touch-action: manipulation; user-select: none;
         }
-        .container { display: flex; flex-direction: column; height: 100dvh; padding: 10px; box-sizing: border-box; }
-        
+
+        /* コンテナ */
+        .container {
+            display: flex; flex-direction: column;
+            height: 100dvh; padding: 10px; box-sizing: border-box;
+        }
+
         /* 接続ボタン */
         .btn-connect {
             width: 100%; padding: 12px; margin-bottom: 10px;
@@ -21,8 +27,10 @@
             font-weight: bold; font-size: 16px; cursor: pointer;
         }
 
-        /* ダッシュボード */
-        .dashboard { display: flex; gap: 10px; flex: 0 0 90px; margin-bottom: 10px; }
+        /* ダッシュボード (回数・BPM) */
+        .dashboard {
+            display: flex; gap: 10px; flex: 0 0 90px; margin-bottom: 10px;
+        }
         .card {
             flex: 1; background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
@@ -32,19 +40,21 @@
         #val-count { color: #00ffcc; }
         #val-bpm { color: #ff5555; }
 
-        /* グラフ */
+        /* グラフエリア */
         .chart-wrapper {
             flex: 1; position: relative; width: 100%;
             background: #080808; border: 1px solid #222; border-radius: 8px;
             margin-bottom: 10px; overflow: hidden;
         }
 
-        /* コントロール */
+        /* 操作パネル */
         .controls {
             flex: 0 0 auto; background: #111; padding: 10px;
             border-radius: 8px; border: 1px solid #333;
             display: flex; flex-direction: column; gap: 10px;
         }
+
+        /* 自動調整ボタン群 */
         .wiz-label { font-size: 11px; color: #aaa; margin-bottom: -5px; }
         .btn-row { display: flex; gap: 5px; }
         .btn-cal {
@@ -56,20 +66,25 @@
         #btn-range { background: linear-gradient(135deg, #0056b3, #003060); }
         #btn-fast  { background: linear-gradient(135deg, #b30047, #600020); }
         #btn-slow  { background: linear-gradient(135deg, #5e00b3, #300060); }
+        
+        /* 実行中スタイル */
         .active-cal { border: 2px solid #fff; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
 
-        /* スライダー */
-        .manual-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        /* 手動スライダー群 */
+        .manual-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+        }
         .slider-box { background: #222; padding: 6px; border-radius: 4px; }
         .slider-header { display: flex; justify-content: space-between; font-size: 10px; color: #888; margin-bottom: 4px; }
         .s-val { color: #00ffcc; font-weight: bold; }
         input[type=range] { width: 100%; margin: 0; cursor: pointer; display: block; }
 
-        /* リセット */
+        /* リセットボタン */
         .btn-reset {
             background: #dc3545; color: white; border: none; padding: 8px;
             border-radius: 4px; font-weight: bold; width: 100%; font-size: 12px;
         }
+
         button:disabled, input:disabled { opacity: 0.3; pointer-events: none; }
     </style>
 </head>
@@ -79,8 +94,14 @@
     <button id="btnConnect" class="btn-connect" onclick="connectDevice()">デバイス接続 (Start)</button>
 
     <div class="dashboard">
-        <div class="card"><span class="val" id="val-count">0</span><span class="lbl">COUNT</span></div>
-        <div class="card"><span class="val" id="val-bpm">0</span><span class="lbl">BPM</span></div>
+        <div class="card">
+            <span class="val" id="val-count">0</span>
+            <span class="lbl">COUNT</span>
+        </div>
+        <div class="card">
+            <span class="val" id="val-bpm">0</span>
+            <span class="lbl">BPM</span>
+        </div>
     </div>
 
     <div class="chart-wrapper">
@@ -90,9 +111,15 @@
     <div class="controls">
         <div class="wiz-label">▼ 自動学習 (各5秒)</div>
         <div class="btn-row">
-            <button id="btn-range" class="btn-cal" onclick="send('CAL:RANGE')" disabled>1.範囲<span>(最大〜最小)</span></button>
-            <button id="btn-fast" class="btn-cal" onclick="send('CAL:FAST')" disabled>2.最速<span>(連打測定)</span></button>
-            <button id="btn-slow" class="btn-cal" onclick="send('CAL:SLOW')" disabled>3.最遅<span>(停止測定)</span></button>
+            <button id="btn-range" class="btn-cal" onclick="send('CAL:RANGE')" disabled>
+                1.範囲<span>(最大〜最小)</span>
+            </button>
+            <button id="btn-fast" class="btn-cal" onclick="send('CAL:FAST')" disabled>
+                2.最速<span>(連打測定)</span>
+            </button>
+            <button id="btn-slow" class="btn-cal" onclick="send('CAL:SLOW')" disabled>
+                3.最遅<span>(停止測定)</span>
+            </button>
         </div>
 
         <div class="wiz-label" style="margin-top:5px;">▼ 手動微調整 (オート結果を上書き)</div>
@@ -114,12 +141,13 @@
                 <input type="range" id="sl-t" min="500" max="8000" step="100" oninput="manualUpdate()" disabled>
             </div>
         </div>
+
         <button class="btn-reset" onclick="send('RST')" id="btnReset" disabled>カウントリセット</button>
     </div>
 </div>
 
 <script>
-    // === UUID 定義 ===
+    // === UUID 定義 (M5側と一致・修正済み) ===
     const UUID_S = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
     const UUID_T = "beb5483e-36e1-4688-b7f5-ea07361b26a8"; // Notify (M5->PC)
     const UUID_R = "12903522-3783-4044-932f-7671b7642395"; // Write  (PC->M5)
@@ -133,7 +161,7 @@
     let dHigh = new Array(maxData).fill(0.5);
     let dLow  = new Array(maxData).fill(-0.5);
 
-    // DOM要素
+    // DOM要素キャッシュ
     const slH = document.getElementById('sl-h'), vH = document.getElementById('v-h');
     const slL = document.getElementById('sl-l'), vL = document.getElementById('v-l');
     const slD = document.getElementById('sl-d'), vD = document.getElementById('v-d');
@@ -151,7 +179,7 @@
             lt = new Date().getTime();
         });
 
-        // グラフ描画
+        // グラフ描画設定
         const ctx = document.getElementById('mainChart').getContext('2d');
         chart = new Chart(ctx, {
             type: 'line',
@@ -177,6 +205,7 @@
     // === Bluetooth接続 ===
     async function connectDevice() {
         try {
+            // 変数名を UUID_S に修正済み
             device = await navigator.bluetooth.requestDevice({
                 filters: [{ name: "M5-ULTIMATE-STROKER" }],
                 optionalServices: [UUID_S]
