@@ -2,214 +2,310 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>M5 Controller</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>M5 シゴキ・コントローラー</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { background-color: #1a1a1a; color: #eee; font-family: 'Segoe UI', monospace; text-align: center; margin: 0; padding: 20px; }
-        h2 { margin: 0 0 20px 0; color: #00ffcc; text-shadow: 0 0 10px #00ffcc; }
-        
-        /* Dashboard */
-        .dashboard { display: flex; justify-content: center; gap: 20px; margin-bottom: 20px; }
-        .card { background: #333; padding: 15px; border-radius: 8px; width: 120px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .value { font-size: 2.5em; font-weight: bold; color: #fff; }
-        .label { font-size: 0.8em; color: #aaa; }
-        
-        /* Controls */
-        .controls { background: #2a2a2a; padding: 20px; border-radius: 10px; max-width: 600px; margin: 0 auto 20px auto; border: 1px solid #444; }
-        .control-group { margin-bottom: 15px; text-align: left; }
-        .control-label { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 5px; }
-        input[type=range] { width: 100%; cursor: pointer; }
-        
-        /* Buttons */
-        .btn-row { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
-        button { padding: 12px 24px; font-size: 1em; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        .btn-connect { background: #007bff; color: white; width: 100%; max-width: 600px; margin-bottom: 20px; }
-        .btn-calib { background: #ffaa00; color: black; }
-        .btn-reset { background: #dc3545; color: white; }
-        button:disabled { background: #555; cursor: not-allowed; }
+        /* 全画面・スクロール禁止設定 */
+        html, body {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* スクロール禁止 */
+            background-color: #000;
+            color: #fff;
+            font-family: sans-serif;
+            touch-action: manipulation; /* ダブルタップ判定用 */
+            user-select: none; /* テキスト選択禁止 */
+        }
 
-        /* Chart */
-        .chart-container { max-width: 800px; margin: 0 auto; background: #000; border: 1px solid #333; }
-        #status { height: 20px; color: #ff5555; margin-bottom: 10px; font-weight: bold; }
+        /* フレックスボックスで画面いっぱいに配置 */
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100dvh; /* スマホのアドレスバー考慮 */
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        /* ヘッダーエリア */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 50px;
+            border-bottom: 1px solid #333;
+            margin-bottom: 10px;
+        }
+        h2 { margin: 0; font-size: 18px; color: #00ffcc; }
+        #status { font-size: 12px; color: #555; }
+
+        /* メイン数値表示エリア */
+        .dashboard {
+            display: flex;
+            justify-content: space-around;
+            flex: 0 0 auto; /* 高さは中身に合わせる */
+            margin-bottom: 10px;
+        }
+        .card {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 8px;
+            width: 45%;
+            text-align: center;
+            border: 1px solid #333;
+        }
+        .label { font-size: 12px; color: #aaa; margin-bottom: 5px; }
+        .value { font-size: 40px; font-weight: bold; color: #fff; font-family: monospace; }
+        #dispCount { color: #00ffcc; }
+        #dispBpm { color: #ff5555; }
+
+        /* グラフエリア（余った高さを全部使う） */
+        .chart-wrapper {
+            flex: 1; /* 残りのスペースを埋める */
+            position: relative;
+            width: 100%;
+            border: 1px solid #222;
+            background: #0a0a0a;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        /* 操作パネルエリア */
+        .controls {
+            flex: 0 0 auto;
+            background: #151515;
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid #333;
+        }
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .slider-label { font-size: 12px; width: 80px; }
+        .slider-val { font-size: 14px; font-weight: bold; width: 50px; text-align: right; color: #00ffcc;}
+        input[type=range] { flex: 1; margin: 0 10px; }
+
+        /* ボタン群 */
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            flex: 1;
+            padding: 12px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            color: #fff;
+            cursor: pointer;
+        }
+        #btnConnect { background: #007bff; width: 100%; }
+        #btnCalib { background: #ffaa00; color: #000; }
+        #btnReset { background: #dc3545; }
+        button:disabled { opacity: 0.3; }
+
     </style>
 </head>
 <body>
 
-    <h2>M5 STROKE CONTROLLER</h2>
-    
-    <button id="connectBtn" class="btn-connect" onclick="connectBluetooth()">CONNECT DEVICE</button>
-    <div id="status">Disconnected</div>
+<div class="container">
+    <div class="header">
+        <h2>M5 シゴキ・モニター</h2>
+        <div id="status">未接続</div>
+    </div>
 
     <div class="dashboard">
         <div class="card">
-            <div class="label">COUNT</div>
+            <div class="label">現在の回数</div>
             <div class="value" id="dispCount">0</div>
         </div>
         <div class="card">
-            <div class="label">BPM</div>
+            <div class="label">ペース (BPM)</div>
             <div class="value" id="dispBpm">0</div>
         </div>
     </div>
 
-    <div class="chart-container">
+    <div class="chart-wrapper">
         <canvas id="waveChart"></canvas>
     </div>
 
     <div class="controls">
-        <div class="control-group">
-            <div class="control-label">
-                <span>TRIGGER SENSITIVITY (Threshold)</span>
-                <span id="valThresh">0.50</span> G
-            </div>
-            <input type="range" id="rangeThresh" min="0.1" max="2.0" step="0.05" value="0.5" oninput="updateSettings()" disabled>
-            <div class="label" style="margin-top:5px;">← Sensitive (Small Move) | Hard (Big Move) →</div>
+        <button id="btnConnect" onclick="connectBluetooth()">デバイス接続 (M5)</button>
+
+        <div class="control-row">
+            <div class="slider-label">感度(閾値)</div>
+            <input type="range" id="rangeThresh" min="0.01" max="1.0" step="0.01" value="0.2" oninput="updateSettings()" disabled>
+            <div class="slider-val" id="valThresh">0.20</div>
+        </div>
+        <div class="control-row">
+            <div class="slider-label">連打防止</div>
+            <input type="range" id="rangeDebounce" min="50" max="800" step="10" value="150" oninput="updateSettings()" disabled>
+            <div class="slider-val"><span id="valDebounce">150</span>ms</div>
         </div>
 
-        <div class="control-group">
-            <div class="control-label">
-                <span>SPEED LIMIT (Min Interval)</span>
-                <span id="valDebounce">150</span> ms
-            </div>
-            <input type="range" id="rangeDebounce" min="50" max="1000" step="10" value="150" oninput="updateSettings()" disabled>
-            <div class="label" style="margin-top:5px;">← Allow Fast | Ignore Fast →</div>
-        </div>
-
-        <div class="btn-row">
-            <button class="btn-calib" onclick="sendCommand('CAL')" disabled id="btnCalib">AUTO CALIBRATE (3s)</button>
-            <button class="btn-reset" onclick="sendCommand('RST')" disabled id="btnReset">RESET COUNT</button>
+        <div class="btn-group">
+            <button id="btnCalib" onclick="sendCommand('CAL')" disabled>自動調整 (3秒)</button>
+            <button id="btnReset" onclick="sendCommand('RST')" disabled>リセット</button>
         </div>
     </div>
+</div>
 
-    <script>
-        const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-        const TX_UUID      = "beb5483e-36e1-4688-b7f5-ea07361b26a8"; // Notify
-        const RX_UUID      = "12903522-3783-4044-932f-7671b7642395"; // Write
-
-        let device, server, rxChar, txChar;
-        let chart;
-        const maxDataPoints = 100;
-        let waveData = new Array(maxDataPoints).fill(0);
-        let threshData = new Array(maxDataPoints).fill(0.5);
-        let negThreshData = new Array(maxDataPoints).fill(-0.5);
-
-        // UI Elements
-        const elThresh = document.getElementById('rangeThresh');
-        const elDebounce = document.getElementById('rangeDebounce');
-        const valThresh = document.getElementById('valThresh');
-        const valDebounce = document.getElementById('valDebounce');
-
-        window.onload = function() {
-            const ctx = document.getElementById('waveChart').getContext('2d');
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: new Array(maxDataPoints).fill(''),
-                    datasets: [
-                        { label: 'Motion', data: waveData, borderColor: '#00ffcc', borderWidth: 2, pointRadius: 0, tension: 0.1 },
-                        { label: 'Limit', data: threshData, borderColor: '#ff5555', borderWidth: 1, borderDash: [5, 5], pointRadius: 0 },
-                        { label: 'Limit', data: negThreshData, borderColor: '#ff5555', borderWidth: 1, borderDash: [5, 5], pointRadius: 0 }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    animation: false,
-                    scales: { y: { min: -2, max: 2, grid: { color: '#333' } } },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        };
-
-        async function connectBluetooth() {
-            try {
-                device = await navigator.bluetooth.requestDevice({
-                    filters: [{ name: "M5-ONANI-CONTROLLER" }],
-                    optionalServices: [SERVICE_UUID]
-                });
-
-                document.getElementById('status').innerText = "Connecting...";
-                server = await device.gatt.connect();
-                const service = await server.getPrimaryService(SERVICE_UUID);
-                
-                txChar = await service.getCharacteristic(TX_UUID);
-                rxChar = await service.getCharacteristic(RX_UUID);
-
-                await txChar.startNotifications();
-                txChar.addEventListener('characteristicvaluechanged', handleData);
-
-                // UI Enable
-                document.getElementById('status').innerText = "CONNECTED";
-                document.getElementById('status').style.color = "#00ffcc";
-                document.getElementById('connectBtn').style.display = 'none';
-                document.getElementById('btnCalib').disabled = false;
-                document.getElementById('btnReset').disabled = false;
-                elThresh.disabled = false;
-                elDebounce.disabled = false;
-
-            } catch (error) {
-                console.error(error);
-                document.getElementById('status').innerText = "Connection Failed";
-            }
-        }
-
-        function handleData(event) {
-            const value = new TextDecoder().decode(event.target.value);
-            // Format: "Count,BPM,Wave,Threshold,Debounce,IsCalib"
-            const [count, bpm, wave, thresh, debounce, isCalib] = value.split(',').map(parseFloat);
-
-            document.getElementById('dispCount').innerText = count;
-            document.getElementById('dispBpm').innerText = bpm.toFixed(0);
-            
-            // Sync slider values with device (only if not dragging)
-            // (Optional: You might want the device to follow the UI, not vice versa, 
-            // but this keeps them in sync after auto-calibration)
-            if (!elThresh.matches(':active')) {
-                elThresh.value = thresh;
-                valThresh.innerText = thresh.toFixed(2);
-            }
-            if (!elDebounce.matches(':active')) {
-                elDebounce.value = debounce;
-                valDebounce.innerText = debounce.toFixed(0);
-            }
-
-            if (isCalib === 1) {
-                document.getElementById('status').innerText = "CALIBRATING... MOVE!";
-                document.getElementById('status').style.color = "yellow";
+<script>
+    // === ダブルタップで全画面切り替え ===
+    let lastTap = 0;
+    document.addEventListener('touchend', function(e) {
+        const currentTime = new Date().getTime();
+        const tapLength = currentTime - lastTap;
+        if (tapLength < 500 && tapLength > 0) {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(e=>{});
             } else {
-                document.getElementById('status').innerText = "ACTIVE";
-                document.getElementById('status').style.color = "#00ffcc";
+                document.exitFullscreen().catch(e=>{});
             }
-
-            // Update Chart
-            waveData.push(wave);
-            waveData.shift();
-            // Use current slider value for immediate visual feedback
-            const currentThresh = parseFloat(elThresh.value);
-            threshData.push(currentThresh);
-            threshData.shift();
-            negThreshData.push(-currentThresh);
-            negThreshData.shift();
-
-            chart.update();
+            e.preventDefault();
         }
+        lastTap = currentTime;
+    });
 
-        // Send Command to M5
-        async function sendCommand(cmd) {
-            if (!rxChar) return;
-            await rxChar.writeValue(new TextEncoder().encode(cmd));
-        }
+    // === Bluetooth設定 ===
+    const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+    const TX_UUID      = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+    const RX_UUID      = "12903522-3783-4044-932f-7671b7642395";
 
-        // Send Settings (Throttled or on Input)
-        async function updateSettings() {
-            const t = elThresh.value;
-            const d = elDebounce.value;
-            valThresh.innerText = parseFloat(t).toFixed(2);
-            valDebounce.innerText = d;
+    let device, rxChar;
+    let chart;
+    const maxDataPoints = 100;
+    // グラフの初期データ
+    let waveData = new Array(maxDataPoints).fill(0);
+    let threshData = new Array(maxDataPoints).fill(0.2);
+    let negThreshData = new Array(maxDataPoints).fill(-0.2);
+
+    // UI要素
+    const elThresh = document.getElementById('rangeThresh');
+    const elDebounce = document.getElementById('rangeDebounce');
+    const valThresh = document.getElementById('valThresh');
+    const valDebounce = document.getElementById('valDebounce');
+    const btnConnect = document.getElementById('btnConnect');
+
+    window.onload = function() {
+        const ctx = document.getElementById('waveChart').getContext('2d');
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: new Array(maxDataPoints).fill(''),
+                datasets: [
+                    { label: '動き', data: waveData, borderColor: '#00ffcc', borderWidth: 2, pointRadius: 0, tension: 0.2 },
+                    { label: '判定線', data: threshData, borderColor: '#ff5555', borderWidth: 1, borderDash: [5, 5], pointRadius: 0 },
+                    { label: '判定線', data: negThreshData, borderColor: '#ff5555', borderWidth: 1, borderDash: [5, 5], pointRadius: 0 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false, /* 親要素に合わせて伸縮 */
+                animation: false,
+                scales: { 
+                    y: { min: -1.5, max: 1.5, grid: { color: '#333' } },
+                    x: { display: false } // X軸ラベル非表示
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    };
+
+    async function connectBluetooth() {
+        try {
+            device = await navigator.bluetooth.requestDevice({
+                filters: [{ name: "M5-ONANI-CONTROLLER" }],
+                optionalServices: [SERVICE_UUID]
+            });
+
+            document.getElementById('status').innerText = "接続中...";
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService(SERVICE_UUID);
             
-            // "SET:threshold:debounce"
-            const cmd = `SET:${t}:${d}`;
-            await sendCommand(cmd);
+            const txChar = await service.getCharacteristic(TX_UUID);
+            rxChar = await service.getCharacteristic(RX_UUID);
+
+            await txChar.startNotifications();
+            txChar.addEventListener('characteristicvaluechanged', handleData);
+
+            // UI有効化
+            document.getElementById('status').innerText = "接続完了";
+            document.getElementById('status').style.color = "#00ffcc";
+            btnConnect.style.display = 'none'; // ボタン消す
+            
+            document.getElementById('btnCalib').disabled = false;
+            document.getElementById('btnReset').disabled = false;
+            elThresh.disabled = false;
+            elDebounce.disabled = false;
+
+        } catch (error) {
+            console.error(error);
+            document.getElementById('status').innerText = "接続キャンセル";
         }
-    </script>
+    }
+
+    function handleData(event) {
+        const value = new TextDecoder().decode(event.target.value);
+        // "Count,BPM,Wave,Threshold,Debounce,IsCalib"
+        const [count, bpm, wave, thresh, debounce, isCalib] = value.split(',').map(parseFloat);
+
+        document.getElementById('dispCount').innerText = count;
+        document.getElementById('dispBpm').innerText = bpm.toFixed(0);
+        
+        // スライダー同期（ドラッグ中でない時のみ）
+        if (!elThresh.matches(':active')) {
+            elThresh.value = thresh;
+            valThresh.innerText = thresh.toFixed(2);
+        }
+        if (!elDebounce.matches(':active')) {
+            elDebounce.value = debounce;
+            valDebounce.innerText = debounce.toFixed(0);
+        }
+
+        if (isCalib === 1) {
+            document.getElementById('status').innerText = "自動調整中...動いて！";
+            document.getElementById('status').style.color = "yellow";
+        } else {
+            document.getElementById('status').innerText = "測定中";
+            document.getElementById('status').style.color = "#00ffcc";
+        }
+
+        // グラフ更新
+        waveData.push(wave);
+        waveData.shift();
+        
+        // 現在のスライダーの値をグラフの赤線に反映（即座に見たいので）
+        const currentThresh = parseFloat(elThresh.value);
+        threshData.push(currentThresh);
+        threshData.shift();
+        negThreshData.push(-currentThresh);
+        negThreshData.shift();
+
+        chart.update();
+    }
+
+    async function sendCommand(cmd) {
+        if (!rxChar) return;
+        await rxChar.writeValue(new TextEncoder().encode(cmd));
+    }
+
+    async function updateSettings() {
+        const t = elThresh.value;
+        const d = elDebounce.value;
+        valThresh.innerText = parseFloat(t).toFixed(2);
+        valDebounce.innerText = d;
+        
+        // M5に送信 "SET:0.05:150"
+        const cmd = `SET:${t}:${d}`;
+        await sendCommand(cmd);
+    }
+</script>
 </body>
 </html>
