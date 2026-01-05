@@ -1,386 +1,215 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>M5 Audio Essence</title>
-<style>
-    :root {
-        --bg-main: #050008;
-        --panel-bg: #100510;
-        --neon-pink: #ff0055;
-        --neon-blue: #00d2ff;
-        --neon-green: #00ff99;
-        --text-color: #eee;
-    }
-    body { background: var(--bg-main); margin: 0; overflow: hidden; font-family: 'Courier New', sans-serif; color: var(--text-color); user-select: none; }
-    
-    #container { display: flex; flex-direction: column; width: 100vw; height: 100vh; position: relative; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M5 Controller</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #1a1a1a; color: #eee; font-family: 'Segoe UI', monospace; text-align: center; margin: 0; padding: 20px; }
+        h2 { margin: 0 0 20px 0; color: #00ffcc; text-shadow: 0 0 10px #00ffcc; }
+        
+        /* Dashboard */
+        .dashboard { display: flex; justify-content: center; gap: 20px; margin-bottom: 20px; }
+        .card { background: #333; padding: 15px; border-radius: 8px; width: 120px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .value { font-size: 2.5em; font-weight: bold; color: #fff; }
+        .label { font-size: 0.8em; color: #aaa; }
+        
+        /* Controls */
+        .controls { background: #2a2a2a; padding: 20px; border-radius: 10px; max-width: 600px; margin: 0 auto 20px auto; border: 1px solid #444; }
+        .control-group { margin-bottom: 15px; text-align: left; }
+        .control-label { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 5px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        
+        /* Buttons */
+        .btn-row { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+        button { padding: 12px 24px; font-size: 1em; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-connect { background: #007bff; color: white; width: 100%; max-width: 600px; margin-bottom: 20px; }
+        .btn-calib { background: #ffaa00; color: black; }
+        .btn-reset { background: #dc3545; color: white; }
+        button:disabled { background: #555; cursor: not-allowed; }
 
-    /* メインビジュアライザーエリア */
-    #visualizer-stage {
-        flex: 1; position: relative; background: #000; overflow: hidden;
-        display: flex; justify-content: center; align-items: center;
-        border-bottom: 2px solid var(--neon-pink);
-    }
-    canvas { position: absolute; top: 0; left: 0; }
-
-    /* 情報オーバーレイ */
-    .info-overlay {
-        position: absolute; top: 20px; left: 0; width: 100%; text-align: center;
-        pointer-events: none; z-index: 10;
-    }
-    #filename { color: var(--neon-blue); font-size: 14px; margin-bottom: 5px; text-shadow: 0 0 5px var(--neon-blue); }
-    #time-display { font-size: 24px; font-weight: bold; color: #fff; }
-    #speed-indicator { 
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        font-size: 80px; font-weight: bold; opacity: 0; transition: opacity 0.2s;
-        color: var(--neon-green); text-shadow: 0 0 20px var(--neon-green); pointer-events: none;
-    }
-
-    /* コントロールパネル */
-    #control-panel {
-        height: 240px; background: var(--panel-bg); padding: 15px; box-sizing: border-box;
-        border-top: 1px solid #333; display: flex; flex-direction: column; gap: 10px;
-    }
-
-    .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-    
-    .btn {
-        background: #222; border: 1px solid var(--neon-blue); color: var(--neon-blue);
-        padding: 15px 0; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center;
-        flex: 1; transition: 0.1s; font-size: 14px; display: flex; align-items: center; justify-content: center;
-    }
-    .btn:active { transform: scale(0.96); background: var(--neon-blue); color: #000; }
-    .btn-main { border-color: var(--neon-pink); color: var(--neon-pink); box-shadow: 0 0 10px rgba(255,0,85,0.2); }
-    .btn-main:active { background: var(--neon-pink); }
-    
-    .slider-group { flex: 1; display: flex; flex-direction: column; font-size: 10px; color: #aaa; }
-    input[type=range] { width: 100%; accent-color: var(--neon-pink); margin-top: 5px; }
-
-    /* メーター類 */
-    .meter-box { width: 60px; text-align: right; }
-    .val-disp { font-size: 14px; color: var(--neon-green); }
-
-    /* ステータスランプ */
-    #status-lamp {
-        width: 10px; height: 10px; border-radius: 50%; background: #333;
-        box-shadow: 0 0 5px #000; transition: 0.1s;
-    }
-
-    /* ファイル入力 */
-    input[type="file"] { display: none; }
-
-    /* 初期画面 */
-    #init-screen {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 999;
-        background: rgba(0,0,0,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center;
-    }
-    .start-btn {
-        padding: 20px 50px; font-size: 24px; border-radius: 50px; margin-top: 30px; cursor: pointer;
-        background: var(--neon-pink); color: #fff; font-weight: bold; border: 2px solid #fff;
-        box-shadow: 0 0 30px var(--neon-pink); animation: pulse 1.5s infinite;
-    }
-    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
-
-</style>
+        /* Chart */
+        .chart-container { max-width: 800px; margin: 0 auto; background: #000; border: 1px solid #333; }
+        #status { height: 20px; color: #ff5555; margin-bottom: 10px; font-weight: bold; }
+    </style>
 </head>
 <body>
 
-<div id="container">
-    <div id="visualizer-stage">
-        <canvas id="vis-canvas"></canvas>
-        <div class="info-overlay">
-            <div id="filename">NO FILE</div>
-            <div id="time-display">00:00 / 00:00</div>
+    <h2>M5 STROKE CONTROLLER</h2>
+    
+    <button id="connectBtn" class="btn-connect" onclick="connectBluetooth()">CONNECT DEVICE</button>
+    <div id="status">Disconnected</div>
+
+    <div class="dashboard">
+        <div class="card">
+            <div class="label">COUNT</div>
+            <div class="value" id="dispCount">0</div>
         </div>
-        <div id="speed-indicator">SKIP &gt;&gt;&gt;</div>
+        <div class="card">
+            <div class="label">BPM</div>
+            <div class="value" id="dispBpm">0</div>
+        </div>
     </div>
 
-    <div id="control-panel">
-        <div class="row">
-            <label class="btn btn-main">
-                📂 LOAD FOLDER
-                <input type="file" id="file-input" webkitdirectory directory multiple accept="audio/*">
-            </label>
-            <div id="status-lamp"></div>
-            <div style="font-size:10px; color:#666;">QUEUE: <span id="queue-count">0</span></div>
+    <div class="chart-container">
+        <canvas id="waveChart"></canvas>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <div class="control-label">
+                <span>TRIGGER SENSITIVITY (Threshold)</span>
+                <span id="valThresh">0.50</span> G
+            </div>
+            <input type="range" id="rangeThresh" min="0.1" max="2.0" step="0.05" value="0.5" oninput="updateSettings()" disabled>
+            <div class="label" style="margin-top:5px;">← Sensitive (Small Move) | Hard (Big Move) →</div>
         </div>
 
-        <div class="row">
-            <button class="btn" onclick="seek(-30)">⏪ -30s</button>
-            <button class="btn" onclick="togglePlay()" id="play-btn">PLAY</button>
-            <button class="btn" onclick="seek(30)">+30s ⏩</button>
-        </div>
-        
-        <div class="row">
-            <button class="btn" style="border-color:var(--neon-green); color:var(--neon-green);" onclick="jumpToClimax()">
-                🚀 CLIMAX JUMP
-            </button>
-            <button class="btn" onclick="playNext()">NEXT TRACK ⏭</button>
+        <div class="control-group">
+            <div class="control-label">
+                <span>SPEED LIMIT (Min Interval)</span>
+                <span id="valDebounce">150</span> ms
+            </div>
+            <input type="range" id="rangeDebounce" min="50" max="1000" step="10" value="150" oninput="updateSettings()" disabled>
+            <div class="label" style="margin-top:5px;">← Allow Fast | Ignore Fast →</div>
         </div>
 
-        <div class="row">
-            <div class="slider-group">
-                <span>SILENCE THRESHOLD (Auto Skip)</span>
-                <input type="range" id="thresh-slider" min="0" max="50" value="10">
-            </div>
-            <div class="meter-box">
-                <span id="thresh-val" class="val-disp">10</span>
-            </div>
-        </div>
-        
-        <div class="row">
-            <div class="slider-group">
-                <span>MAX SPEED (During Silence)</span>
-                <input type="range" id="speed-slider" min="2" max="10" value="5">
-            </div>
-            <div class="meter-box">
-                <span id="speed-val" class="val-disp">x5.0</span>
-            </div>
+        <div class="btn-row">
+            <button class="btn-calib" onclick="sendCommand('CAL')" disabled id="btnCalib">AUTO CALIBRATE (3s)</button>
+            <button class="btn-reset" onclick="sendCommand('RST')" disabled id="btnReset">RESET COUNT</button>
         </div>
     </div>
-</div>
 
-<div id="init-screen">
-    <h1 style="color:var(--neon-pink); text-shadow:0 0 20px var(--neon-pink); font-size:40px; margin:0;">M5 AUDIO</h1>
-    <div style="color:var(--neon-blue); letter-spacing:4px; margin-bottom:20px;">ESSENCE EXTRACTOR</div>
-    <label class="start-btn">
-        🎧 LOAD AUDIO
-        <input type="file" id="init-file-input" webkitdirectory directory multiple accept="audio/*">
-    </label>
-</div>
+    <script>
+        const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+        const TX_UUID      = "beb5483e-36e1-4688-b7f5-ea07361b26a8"; // Notify
+        const RX_UUID      = "12903522-3783-4044-932f-7671b7642395"; // Write
 
-<script>
-    // === 変数 ===
-    const canvas = document.getElementById('vis-canvas');
-    const ctx = canvas.getContext('2d');
-    
-    // Audio Context
-    let audioCtx, analyser, source;
-    let audioEl = new Audio();
-    audioEl.crossOrigin = "anonymous";
-    
-    // プレイリスト
-    let playlist = [];
-    
-    // 設定
-    let silenceThreshold = 10; // 0-255 (低いほど敏感にスキップ)
-    let skipSpeed = 5.0;       // スキップ時の速度
-    let normalSpeed = 1.0;
-    
-    // UI要素
-    const filenameDisp = document.getElementById('filename');
-    const timeDisp = document.getElementById('time-display');
-    const speedInd = document.getElementById('speed-indicator');
-    const statusLamp = document.getElementById('status-lamp');
-    const playBtn = document.getElementById('play-btn');
-    
-    // === 初期化 ===
-    document.getElementById('init-file-input').addEventListener('change', handleFiles);
-    document.getElementById('file-input').addEventListener('change', handleFiles);
+        let device, server, rxChar, txChar;
+        let chart;
+        const maxDataPoints = 100;
+        let waveData = new Array(maxDataPoints).fill(0);
+        let threshData = new Array(maxDataPoints).fill(0.5);
+        let negThreshData = new Array(maxDataPoints).fill(-0.5);
 
-    // スライダー連動
-    document.getElementById('thresh-slider').addEventListener('input', (e) => {
-        silenceThreshold = parseInt(e.target.value);
-        document.getElementById('thresh-val').innerText = silenceThreshold;
-    });
-    document.getElementById('speed-slider').addEventListener('input', (e) => {
-        skipSpeed = parseFloat(e.target.value);
-        document.getElementById('speed-val').innerText = "x" + skipSpeed.toFixed(1);
-    });
+        // UI Elements
+        const elThresh = document.getElementById('rangeThresh');
+        const elDebounce = document.getElementById('rangeDebounce');
+        const valThresh = document.getElementById('valThresh');
+        const valDebounce = document.getElementById('valDebounce');
 
-    // ダブルタップ全画面
-    let lastTap = 0;
-    document.getElementById('visualizer-stage').addEventListener('click', () => {
-        const now = Date.now();
-        if (now - lastTap < 300) {
-            if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
-            else if (document.exitFullscreen) document.exitFullscreen();
-        }
-        lastTap = now;
-    });
-
-    function initAudio() {
-        if (audioCtx) return;
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new AudioContext();
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 256; // 軽めに
-        
-        source = audioCtx.createMediaElementSource(audioEl);
-        source.connect(analyser);
-        analyser.connect(audioCtx.destination);
-    }
-
-    function handleFiles(e) {
-        const files = Array.from(e.target.files);
-        if (files.length === 0) return;
-        
-        // 音声ファイルのみ抽出
-        const audioFiles = files.filter(f => f.type.startsWith('audio/'));
-        if (audioFiles.length === 0) return;
-
-        playlist = playlist.concat(audioFiles);
-        shuffleArray(playlist);
-        
-        document.getElementById('queue-count').innerText = playlist.length;
-        document.getElementById('init-screen').style.display = 'none';
-        
-        initAudio();
-        playNext();
-        renderLoop();
-    }
-
-    function shuffleArray(array) {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-        }
-    }
-
-    function playNext() {
-        if (playlist.length === 0) return;
-        const file = playlist.shift();
-        playlist.push(file); // ループ
-
-        const url = URL.createObjectURL(file);
-        audioEl.src = url;
-        audioEl.load();
-        
-        filenameDisp.innerText = file.name;
-        
-        audioEl.play().then(() => {
-            playBtn.innerText = "PAUSE";
-            // 開始直後は少し飛ばす（無音導入カット）
-            // audioEl.currentTime = 5; 
-        }).catch(console.error);
-        
-        // トラック終了時
-        audioEl.onended = () => {
-            playNext();
+        window.onload = function() {
+            const ctx = document.getElementById('waveChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: new Array(maxDataPoints).fill(''),
+                    datasets: [
+                        { label: 'Motion', data: waveData, borderColor: '#00ffcc', borderWidth: 2, pointRadius: 0, tension: 0.1 },
+                        { label: 'Limit', data: threshData, borderColor: '#ff5555', borderWidth: 1, borderDash: [5, 5], pointRadius: 0 },
+                        { label: 'Limit', data: negThreshData, borderColor: '#ff5555', borderWidth: 1, borderDash: [5, 5], pointRadius: 0 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    scales: { y: { min: -2, max: 2, grid: { color: '#333' } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
         };
-    }
 
-    function togglePlay() {
-        if (audioEl.paused) {
-            audioCtx.resume();
-            audioEl.play();
-            playBtn.innerText = "PAUSE";
-        } else {
-            audioEl.pause();
-            playBtn.innerText = "PLAY";
-        }
-    }
+        async function connectBluetooth() {
+            try {
+                device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: "M5-ONANI-CONTROLLER" }],
+                    optionalServices: [SERVICE_UUID]
+                });
 
-    function seek(sec) {
-        audioEl.currentTime += sec;
-    }
+                document.getElementById('status').innerText = "Connecting...";
+                server = await device.gatt.connect();
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                
+                txChar = await service.getCharacteristic(TX_UUID);
+                rxChar = await service.getCharacteristic(RX_UUID);
 
-    function jumpToClimax() {
-        if (!audioEl.duration) return;
-        // 60% 〜 90% の間へ飛ぶ
-        const range = 0.9 - 0.6;
-        const targetRatio = 0.6 + (Math.random() * range);
-        audioEl.currentTime = audioEl.duration * targetRatio;
-        
-        // 速度を少し落とす（味わうモード）
-        // normalSpeed = 0.9; 
-        // audioEl.playbackRate = 0.9;
-    }
+                await txChar.startNotifications();
+                txChar.addEventListener('characteristicvaluechanged', handleData);
 
-    // === メインループ（解析＆描画） ===
-    function renderLoop() {
-        requestAnimationFrame(renderLoop);
-        
-        // Canvasサイズ調整
-        const w = canvas.parentElement.clientWidth;
-        const h = canvas.parentElement.clientHeight;
-        if (canvas.width !== w || canvas.height !== h) {
-            canvas.width = w;
-            canvas.height = h;
+                // UI Enable
+                document.getElementById('status').innerText = "CONNECTED";
+                document.getElementById('status').style.color = "#00ffcc";
+                document.getElementById('connectBtn').style.display = 'none';
+                document.getElementById('btnCalib').disabled = false;
+                document.getElementById('btnReset').disabled = false;
+                elThresh.disabled = false;
+                elDebounce.disabled = false;
+
+            } catch (error) {
+                console.error(error);
+                document.getElementById('status').innerText = "Connection Failed";
+            }
         }
 
-        if (!analyser) return;
+        function handleData(event) {
+            const value = new TextDecoder().decode(event.target.value);
+            // Format: "Count,BPM,Wave,Threshold,Debounce,IsCalib"
+            const [count, bpm, wave, thresh, debounce, isCalib] = value.split(',').map(parseFloat);
 
-        // 1. 解析データ取得
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-        analyser.getByteFrequencyData(dataArray);
-
-        // 2. 音量（エネルギー）計算
-        let sum = 0;
-        for (let i = 0; i < bufferLength; i++) {
-            sum += dataArray[i];
-        }
-        const average = sum / bufferLength; // 0 - 255
-
-        // 3. 自動変速ロジック (The Silence Skipper)
-        // 音量が閾値を下回ったら加速、上回ったら等倍
-        if (average < silenceThreshold) {
-            // 無音（退屈）
-            audioEl.playbackRate = skipSpeed;
-            speedInd.style.opacity = 0.8; // "SKIP >>>" 表示
-            statusLamp.style.background = "#333";
-            statusLamp.style.boxShadow = "none";
-        } else {
-            // 音あり（重要）
-            audioEl.playbackRate = normalSpeed;
-            speedInd.style.opacity = 0;
+            document.getElementById('dispCount').innerText = count;
+            document.getElementById('dispBpm').innerText = bpm.toFixed(0);
             
-            // ランプを音に合わせて明滅
-            const hue = 180 + (average * 2); // 色変化
-            statusLamp.style.background = `hsl(${hue}, 100%, 60%)`;
-            statusLamp.style.boxShadow = `0 0 ${average/5}px hsl(${hue}, 100%, 60%)`;
+            // Sync slider values with device (only if not dragging)
+            // (Optional: You might want the device to follow the UI, not vice versa, 
+            // but this keeps them in sync after auto-calibration)
+            if (!elThresh.matches(':active')) {
+                elThresh.value = thresh;
+                valThresh.innerText = thresh.toFixed(2);
+            }
+            if (!elDebounce.matches(':active')) {
+                elDebounce.value = debounce;
+                valDebounce.innerText = debounce.toFixed(0);
+            }
+
+            if (isCalib === 1) {
+                document.getElementById('status').innerText = "CALIBRATING... MOVE!";
+                document.getElementById('status').style.color = "yellow";
+            } else {
+                document.getElementById('status').innerText = "ACTIVE";
+                document.getElementById('status').style.color = "#00ffcc";
+            }
+
+            // Update Chart
+            waveData.push(wave);
+            waveData.shift();
+            // Use current slider value for immediate visual feedback
+            const currentThresh = parseFloat(elThresh.value);
+            threshData.push(currentThresh);
+            threshData.shift();
+            negThreshData.push(-currentThresh);
+            negThreshData.shift();
+
+            chart.update();
         }
 
-        // 4. ビジュアライザー描画
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, w, h);
-
-        const cx = w / 2;
-        const cy = h / 2;
-        const radius = Math.min(w, h) / 3;
-
-        // 円形スペクトラム
-        ctx.beginPath();
-        for (let i = 0; i < bufferLength; i++) {
-            const barHeight = dataArray[i] * 0.8;
-            const rad = (i / bufferLength) * Math.PI * 2;
-            
-            // ベース円 + 波形
-            const r = radius + (barHeight * 0.5);
-            const x = cx + Math.cos(rad) * r;
-            const y = cy + Math.sin(rad) * r;
-
-            const hue = (i / bufferLength) * 360 + (average); // 色回転
-            ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
-            ctx.lineWidth = 2;
-            
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
+        // Send Command to M5
+        async function sendCommand(cmd) {
+            if (!rxChar) return;
+            await rxChar.writeValue(new TextEncoder().encode(cmd));
         }
-        ctx.closePath();
-        ctx.stroke();
 
-        // 中央の脈動円
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius * (0.5 + average/400), 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 0, 85, ${average/255})`;
-        ctx.fill();
-
-        // 時間更新
-        const cur = formatTime(audioEl.currentTime);
-        const dur = formatTime(audioEl.duration || 0);
-        timeDisp.innerText = `${cur} / ${dur}`;
-    }
-
-    function formatTime(sec) {
-        const m = Math.floor(sec / 60);
-        const s = Math.floor(sec % 60);
-        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    }
-
-</script>
+        // Send Settings (Throttled or on Input)
+        async function updateSettings() {
+            const t = elThresh.value;
+            const d = elDebounce.value;
+            valThresh.innerText = parseFloat(t).toFixed(2);
+            valDebounce.innerText = d;
+            
+            // "SET:threshold:debounce"
+            const cmd = `SET:${t}:${d}`;
+            await sendCommand(cmd);
+        }
+    </script>
 </body>
 </html>
